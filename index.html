@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <style>
+    body {
+      margin: 0;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+</body>
+<script src="./libs/three.min.js"></script>
+<script src="./libs/OrbitControls.js"></script>
+<script>
+  //创建场景和相机
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  )
+
+  //创建渲染器
+  var renderer = new THREE.WebGLRenderer({
+    antialias: true
+  })
+  renderer.setSize(window.innerWidth, window.innerHeight)
+  document.body.appendChild(renderer.domElement)
+
+  //创建轨道控制器
+  var controls = new THREE.OrbitControls(camera, renderer.domElement)
+
+  // 方向光
+  var directional = new THREE.DirectionalLight(0xffffff, 0.9)
+  directional.position.set(-400, 0, -300)
+  scene.add(directional)
+
+  //环境光
+  var ambient = new THREE.AmbientLight(0xffffff, 0.6)
+  scene.add(ambient)
+  
+  var loader = new THREE.TextureLoader()
+  var group = new THREE.Group() 
+
+  //创建本体
+  var geometry = new THREE.SphereGeometry(20,30,30)
+  var earthMaterial = new THREE.MeshPhongMaterial({ 
+    map: loader.load( './images/earth.png' ),
+    specularMap: loader.load('./images/specular.png'),
+    normalMap:  loader.load('./images/normal.png'),
+    normalScale: new THREE.Vector2(3, 3)
+    
+  })
+  var sphere = new THREE.Mesh(geometry, earthMaterial)
+  group.add(sphere)
+
+
+  //创建流动的大气
+   //顶点着色器
+  var VSHADER_SOURCE = `
+    varying vec2 vUv;
+    void main () {
+      vUv = uv;
+      gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4( position, 1.0 );
+    }
+  `
+
+  //片元着色器
+  var FSHADER_SOURCE = `
+  uniform float time;
+  uniform sampler2D fTexture;
+  uniform sampler2D nTexture;
+  varying vec2 vUv;
+  void main () {
+    vec2 newUv= vUv + vec2( 0, 0.02 ) * time;
+    vec4 noiseRGBA = texture2D( nTexture, newUv );
+    newUv.x += noiseRGBA.r * 0.2;
+    newUv.y += noiseRGBA.g * 0.2;
+    gl_FragColor = texture2D( fTexture, newUv );
+  }
+  `
+
+  var flowTexture = loader.load('./images/flow.png')
+  flowTexture.wrapS = THREE.RepeatWrapping
+  flowTexture.wrapT = THREE.RepeatWrapping
+
+  var noiseTexture = loader.load('./images/noise.png')
+  noiseTexture.wrapS = THREE.RepeatWrapping
+  noiseTexture.wrapT = THREE.RepeatWrapping
+
+  //着色器材质
+  var flowMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      fTexture: {
+        value: flowTexture,
+      },
+      nTexture: {
+        value: noiseTexture,
+      },
+      time: {
+        value: 0.0
+      },
+    },
+    // 顶点着色器
+    vertexShader: VSHADER_SOURCE,
+    // 片元着色器
+    fragmentShader: FSHADER_SOURCE,
+    transparent: true
+  })
+  var fgeometry = new THREE.SphereGeometry(20.001,30,30)
+  var fsphere = new THREE.Mesh(fgeometry, flowMaterial)
+  group.add(fsphere)
+
+  //创建光环
+  var ringMaterial = new THREE.SpriteMaterial( { 
+    map: loader.load('./images/ring.png')
+  } )
+  var sprite = new THREE.Sprite( ringMaterial )
+  sprite.scale.set(53,53, 1)
+  scene.add( sprite )
+
+  scene.add(group)
+
+  //设置相机位置
+  camera.position.z = 50
+
+  var clock = new THREE.Clock()
+  //渲染循环
+  var animate = function () {
+    requestAnimationFrame(animate)
+    var delta = clock.getDelta()
+    group.rotation.y -= 0.002
+    flowMaterial.uniforms.time.value += delta
+    renderer.render(scene, camera)
+  }
+
+  animate()
+</script>
+</html>
